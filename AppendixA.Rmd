@@ -1,0 +1,583 @@
+---
+title: Analysis codes for the paper "Pygoscelis penguin breeding success along the
+  Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
+author: "Lucas Krüger, Francisco Santa Cruz, Mauricio Mardones, César Cárdenas"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document:
+    fig_width: 10
+    fig_height: 8
+  pdf_document: default
+---
+#Load necessary packages
+
+```{r, echo=FALSE}
+library(plyr)
+library(dplyr) # for summarizing data
+library(reshape2)
+library(ggplot2)  # plotting 
+library(sjPlot)
+library(patchwork)
+library(lubridate) # to deal with time data
+library(udunits2) # to deal with geographical data
+library(raster)
+library(MCMCglmm) #Bayesian generalized linear mixed models
+library(lmerTest)
+library(rcompanion)
+library(lmPerm)
+library(ggsignif)
+
+
+
+```
+#change working directory
+
+```{r}
+
+#setwd("D:/BACKUP_Notebook_06_2022/KidsArentAlright/")
+
+```
+###--------penguins-------------
+
+#load data
+
+### data from MAPPPD (penguinmap.org): Humphries et al. 2017 https://doi.org/10.1017/S0032247417000055
+
+```{r,echo=TRUE}
+peng<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/MAPPPD.Rds") # query for area 48.1 
+
+nests<-subset(peng,count_type=="nests",
+              select=c(site_name,site_id,longitude_epsg_4326,latitude_epsg_4326,
+                       common_name,day,month,season_starting,penguin_count,
+                       count_type,vantage,accuracy))
+
+
+chicks<-subset(peng,count_type=="chicks",
+               select=c(site_name,site_id,longitude_epsg_4326,latitude_epsg_4326,
+                        common_name,day,month,season_starting,penguin_count,
+                        count_type,vantage,accuracy))
+nestsM<-ddply(nests, c("common_name","site_name","site_id","season_starting"), summarise,
+              nests=max(penguin_count),
+              Lat=mean(latitude_epsg_4326),
+              Long=mean(longitude_epsg_4326))
+chicksM<-ddply(chicks, c("common_name","site_name","site_id","season_starting"), summarise,
+               chicks=min(penguin_count),
+               Lat=mean(latitude_epsg_4326),
+               Long=mean(longitude_epsg_4326))
+
+cpn<-merge(nestsM,chicksM)
+cpn$chickspernest<-cpn$chicks/cpn$nests  ### measure of breeding success (chicks raised per nest)
+
+cpn2<-data.frame(site=cpn$site_id,SP=cpn$common_name,
+                 Year=cpn$season_starting,
+                 Long=as.numeric(cpn$Long),
+                 Lat=as.numeric(cpn$Lat),
+                 chickspernest=cpn$chickspernest) # cpn stands for Chicks Per Nest
+
+#### this is for summarizing number of populations and number of counts
+
+cpnset<-cpn2 
+
+counts<-ddply(cpnset, c("SP"), summarise,
+              ncounts=length(chickspernest))
+
+counts
+
+pops<-ddply(cpn2, c("SP","site"), summarise,
+            pops=length(chickspernest),
+            Lat=mean(Lat),Long=mean(Long))
+
+
+pops2<-ddply(pops, c("SP"), summarise,
+             Npops=length(pops))
+
+sites<-ddply(cpn, c("site_id"), summarise,
+             Ncounts=length(chicks))
+
+
+
+
+### -------------
+
+cpn$chickspernest<-cpn$chicks/cpn$nests  ### measure of breeding success (chicks raised per nest)
+
+cpn<-merge(cpn,sites,by="site_id")
+
+summary(cpn$nests)
+
+ggplot(cpn,aes(nests))+geom_histogram()+xlim(0,10000)
+ggplot(cpn,aes(nests))+geom_histogram()+xlim(0,100) # check small populations
+ggplot(cpn,aes(nests,chickspernest))+geom_point() # a single large population will be excluded too
+
+
+### eliminate pops with success = 2, as they were two cases of one or two nests
+### eliminate the single population with 80 000 nests
+
+cpn<-subset(cpn,chickspernest<2 & nests<40000)
+summary(cpn$chickspernest)
+
+cpn<-subset(cpn,Ncounts>2)
+
+shapiro.test(cpn$chickspernest) # not normal 
+
+ggplot(cpn,aes(season_starting,chickspernest))+geom_point()+
+  geom_vline(xintercept = 1990)+
+  geom_smooth(method="lm",se=F)+facet_wrap(site_id~.)+theme_bw()
+
+#the plot above shows us a few thigs: slope site variability, few sites with data previous to 1990, populations with three counts may still be not enough for analysis. So, further filters:
+
+cpn<-subset(cpn,season_starting>1989)
+cpn<-subset(cpn,Ncounts>3)
+cpn<-subset(cpn,site_id!="SELV" & site_id!="SPTR")
+
+
+cpn<-subset(cpn,Ncounts>2)
+
+shapiro.test(cpn$chickspernest) # not normal 
+shapiro.test(cpn$chickspernest[cpn$chickspernest>0.5]) # normal if eliminate values lower than 0.5
+cpn<-subset(cpn, chickspernest>0.5)
+ggplot(cpn,aes(chickspernest))+geom_histogram()+theme_bw()+xlab("Chicks raised per nest")
+
+### test if chicks per nest varied in time using sites  as random factors
+
+cpn$Zss<-scale(cpn$season_starting,center=T)
+
+
+cpn$site_id2<-factor(cpn$site_id,levels=c("LLAN","ARDL","BART","SHIR","HALF","ENTR",
+                                          "BROW","SPIP","ORNE","GEOR","LITC","DOBE","DAMO","LOCK",
+                                          "JOUG","NEKO","ALMI","PCHA","PLEN","PETE"))  # order by location latitude
+
+cpn$site_name2<-factor(cpn$site_name,levels=c("Llano Point","Ardley Island","Barton Peninsula",
+                                              "Cape Shirreff","Half Moon Island","Entrance Point",
+                                              "Brown Bluff","Spigot Peak Point","Orne Islands",
+                                              "Georges Point (Ronge Island)","Litchfield Island",
+                                              "Dorian Beacon","Dorian Bay/Damoy Point","Port Lockroy",
+                                              "Jougla Point","Neko Harbor (Andvord Bay)",
+                                              "Brown Station","Port Charcot",
+                                              "Pleneau Island","Petermann Island"))  # order by location latitude
+
+#species summaries 
+
+length(unique(cpn$site_id[cpn$common_name=="adelie penguin"]))
+length((cpn$site_id[cpn$common_name=="adelie penguin"]))
+
+length(unique(cpn$site_id[cpn$common_name=="chinstrap penguin"]))
+length((cpn$site_id[cpn$common_name=="chinstrap penguin"]))
+
+
+length(unique(cpn$site_id[cpn$common_name=="gentoo penguin"]))
+length((cpn$site_id[cpn$common_name=="gentoo penguin"]))
+
+
+(ggplot(cpn,aes(season_starting,chickspernest))+geom_point(size=1,alpha=0.5)+
+    geom_smooth(method="lm",se=F)+facet_wrap(site_name2~.)+theme_bw()+theme(panel.spacing.x = unit(1.5, "lines")))
+
+lmer1<-lmer(chickspernest~Zss+(Zss|site_id),data=cpn)  #previous picture to justify the structure of the random term
+
+isSingular(lmer1)# convergence problems detected
+
+#therefore, a bayesian evaluation with flexible priors is justified to avoid convergence issues 
+
+prior<- list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = diag(2), nu = 0.002,
+                                alpha.mu = rep(0, 2),
+                                alpha.V= diag(2, 2, 2))))
+
+mc1<-MCMCglmm(chickspernest~season_starting, random=~us(1 + Zss):site_id, rcov=~units, 
+              
+              family="gaussian",
+              data=cpn, nodes="ALL",  scale=TRUE, nitt=10999, thin=1, burnin=1000, pr=T,
+              pl=FALSE, verbose=TRUE, DIC=TRUE, singular.ok=FALSE, saveX=TRUE,
+              saveZ=TRUE, saveXL=TRUE, slice=FALSE, ginverse=NULL, trunc=FALSE,
+              prior= prior)
+
+
+summary(mc1) # no significance, lets see the random terms posteriorly 
+
+plot(mc1$Sol) # diagnostic plots for site effects majority of posteriors distributions are acceptable
+plot(mc1$VCV) # diagnostic plots for random efects acceptable
+
+#proportion of the effective sample size: we want a low number as it indicates model converged with less iterations
+summary(mc1)$solutions[2,4]/10999 
+
+sol<-data.frame(mc1$Sol) # random effects
+
+solm<-melt(sol,id.vars=c("X.Intercept.","season_starting"))
+
+solm$vars<-substring(solm$variable,first=1,last=4)
+summary(as.factor(solm$vars))
+
+intm<-subset(solm,vars=="X.In") #select intercepts
+slm<-subset(solm,vars=="Zss.") #select slopes
+
+tail(slm)
+
+slm$site_id<-substring(slm$variable,first=13,last=17)
+
+
+
+sites<-ddply(cpn, c("site_id"), summarise,
+             pops=length(chickspernest),
+             Lat=mean(Lat),Long=mean(Long))
+
+ranef<-ddply(slm, c("site_id"), summarise,
+             slp=mean(season_starting),slpsd=sd(season_starting),
+             slpse=slpsd/sqrt(length(value)-1),
+             med=median(value),
+             q95=quantile(value,prob=0.95),
+             q05=quantile(value,prob=0.05))
+
+
+
+
+rlat<-merge(slm,sites,by="site_id")
+
+
+ranef<-ddply(slm, c("site_id"), summarise,
+             slp=mean(value),slpsd=sd(value),
+             slpse=slpsd/sqrt(length(value)-1),
+             med=median(value),
+             q95=quantile(value,prob=0.95),
+             q05=quantile(value,prob=0.05))
+
+
+rlat<-merge(ranef,sites,by="site_id")
+
+rlat$Lat_ID<-paste(rlat$Lat,rlat$site_id)
+
+
+rlat$local<-ifelse(rlat$Lat<(-63.2),"Peninsula","South Shetlands")
+
+
+pairwisePermutationTest(slp~local,data=rlat) # difference is marginally significant
+
+(ggplot(rlat,aes(local,slp))+geom_boxplot()+
+    theme_bw()+xlab("")+ylab("Random slope")+coord_flip()+
+    geom_signif(
+      comparisons = list(c("Peninsula","South Shetlands")),
+      map_signif_level = F,step_increase = 0.075,
+      test="wilcox.test", # could not change it to the permutation results, but this is just for plotting
+      textsize = 3))
+
+
+
+
+
+
+```
+
+#load krill acoustic data from "WG-ASAM Results from the WG-ASAM Intersessional e-Group on Krill Biomass Estimates from Acoustic Surveys; 2021;"
+
+```{r,echo=TRUE}
+
+
+krill<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/CCAMLR_krill_biomass.Rds") # data from WG-ASAM e-group (2021)
+
+
+krill2<-subset(krill,
+               Strata=="Bransfield"|Strata=="West") ### subset the strata 
+                                                    ### where fishing has been consistent
+
+```
+
+
+#load and process fishing data 
+
+```{r,echo=TRUE}
+kf0<-read.csv("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/C1_Sect.csv") ### fishing data from CCAMLR, this is the raw data, not available freely (only the CCAMLR secretariat is allowed to distribute this data) 
+
+kf0$CatchT<-kf0$KrillCaughtKG/1000  ### catch in tones
+
+kf0$ts<- as.POSIXct(strptime(kf0$Day,format="%m/%d/%Y" ,tz="GMT")) 
+
+kf0$month<-month(kf0$ts)
+
+kf0$FSeason<-ifelse(kf0$month>11,
+            kf0$CalendarYear,kf0$CalendarYear-1) ### fishing season starts in december
+                                                 ### january up to november next year
+                                                 ### is assigned to the season of the previous year
+                                                 ### krill season however, places december to the
+                                                 ### following year, 
+                                                 ### therefore fishing season 2018=krill season 2019
+                                                 
+kf<-kf0
+
+strata<-shapefile("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/Shapefiles/AMLR_STRATA_.shp")  ### from CCAMLR as well (AMLR_strata.Rds)
+
+crs=CRS( "+proj=longlat +datum=WGS84 +no_defs")
+
+kcoords<-coordinates(data.frame(x=kf$FishingLon,y=kf$FishingLat))
+
+kf.spdf<-SpatialPointsDataFrame(kcoords,kf,proj4string = crs)
+
+kf.strata<-over(kf.spdf,strata)
+
+kf.spdf$Strata<-kf.strata$Strata
+
+
+kf.spdf<-subset(kf.spdf,FishingLon<(-50))  # eliminate the South Orkney Data 
+
+```
+
+#### bring krill and fishery together
+
+```{r,echo=TRUE}
+
+kf.spdf$Year<-kf.spdf$CalendarYear
+
+### months with krill estimation
+
+kfMo<-subset(kf.spdf,month=="12"|month=="1"|month=="2"|month=="3") 
+
+fcr2<-ddply((data.frame(kfMo)), c("Year","Strata"), summarise,
+            CatchS=sum(CatchT))  ### total catch for each year and strata
+
+# this is the data we are making available (CCAMLR_krill_fishing_catch.Rds), already summarized fishing data; if you wish to reproduce this script, starts out from here to analyze fishing data
+
+summary(fcr2) ### CatchS is catch in Ton
+
+head(krill) ### amlrbiomass is in ton
+
+kr<-data.frame(krill[1],krill[2],krill[14]) # keep only needed variables
+
+kmfcr<-merge(kr,fcr2,by=c("Strata","Year"),all=T)  # merge krill and fishery data 
+
+kmfcr2<-subset(kmfcr,Year<2019 & Year>1994) 
+
+# check 1st quantiles to fill missing values
+summary(kmfcr2$amlrbiomass[kmfcr2$Strata=="Bransfield"]) 
+summary(kmfcr2$amlrbiomass[kmfcr2$Strata=="West"])
+
+kmfcr2$amlrbiomass[is.na(kmfcr2$amlrbiomass) & kmfcr2$Strata=="Bransfield"]<-392888# 1st qu
+kmfcr2$amlrbiomass[is.na(kmfcr2$amlrbiomass) & kmfcr2$Strata=="West"]<-752566# 1st qu
+
+# substitute missing values by 0 (no catch)
+summary(kmfcr2$CatchS[kmfcr2$Strata=="West"])
+summary(kmfcr2$CatchS[kmfcr2$Strata=="Bransfield"])
+
+kmfcr2$CatchS[is.na(kmfcr2$CatchS) & kmfcr2$Strata=="West"]<-0 # 1st qu
+kmfcr2$CatchS[is.na(kmfcr2$CatchS) &  kmfcr2$Strata=="Bransfield"]<-0 # 1st qu
+
+kmfcr2$Strata<-factor(kmfcr2$Strata,levels=c("West","Bransfield"))
+
+summary(kmfcr2$amlrbiomass/1000)
+kmfcr2$CatchK<-kmfcr2$CatchS/kmfcr2$amlrbiomass # harvest rate 
+
+
+kmfcr2$State[(kmfcr2$amlrbiomass/1000)<1251.728 & kmfcr2$Strata=="West"]<-"Biomass < mean"
+kmfcr2$State[(kmfcr2$amlrbiomass/1000)<802.284 & kmfcr2$Strata=="Bransfield"]<-"Biomass < mean"
+kmfcr2$State[(kmfcr2$amlrbiomass/1000)<200]<-"Near or below catch limit"
+kmfcr2$State[is.na(kmfcr2$State)]<-"Biomass > mean"
+
+plot2a<-ggplot()+
+  geom_hline(yintercept=155,linetype="dotted",colour="red")+
+  geom_hline(yintercept=1251.728,linetype="dashed")+
+  geom_hline(yintercept=802.284,linetype="dashed")+
+  geom_smooth(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+              aes(x=Year,y=(amlrbiomass/1000)),
+    
+    
+    method="lm",se=F,fullrange=F,formula=y~x)+xlim(1995,2018)+
+  geom_point(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+             aes(x=Year,y=(amlrbiomass/1000),colour=State),size=2)+theme_bw()+facet_wrap(~Strata)+
+  ggtitle(label="a. krill biomass")+
+  scale_colour_manual(values=c("yellow3","green2","red2"))+
+  ylab("thousand tonnes")+xlab("") # figure X
+
+
+plot2b<-ggplot()+
+  geom_hline(yintercept=5,linetype="dotted",colour="red")+geom_point()+
+  
+  geom_smooth(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+              aes(x=Year,y=(CatchK*100)),method="lm",se=F,fullrange=F,span=0.9)+xlim(1995,2018)+
+  geom_point(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+             aes(x=Year,y=(CatchK*100),colour=State),size=2)+theme_bw()+facet_wrap(~Strata)+
+  ggtitle(label="b. krill caught biomass")+
+  scale_colour_manual(values=c("yellow3","green2","red2"))+
+  ylab("% of catched biomass") # figure X
+
+
+plot2c<-ggplot()+
+  geom_hline(yintercept=5,linetype="dashed")+geom_point()+
+  geom_vline(xintercept=1251.728,linetype="dashed")+
+  geom_vline(xintercept=802.284,linetype="dashed")+
+  geom_smooth(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+              aes(x=(amlrbiomass/1000),y=(CatchK*100)),
+              method="gam",se=F,fullrange=F,span=0.9)+
+  geom_point(data=subset(kmfcr2,Strata=="Bransfield"|Strata=="West"),
+             aes(x=(amlrbiomass/1000),y=(CatchK*100),colour=State),size=2)+theme_bw()+facet_wrap(~Strata)+
+  ggtitle(label="c. availability vs catch")+
+  scale_colour_manual(values=c("yellow3","green2","red2"))+
+  ylab("% of catched biomass")+ 
+  xlab("Krill biomass (million tonnes)") # figure X
+
+plot2a/plot2b/plot2c # figure 2
+
+
+
+```
+
+### Testing whether krill biomass changed in time 
+
+```{r,echo=TRUE}
+
+kmfcr2<-na.omit(kmfcr2)
+
+ggplot(kmfcr2,aes(amlrbiomass))+geom_histogram()+theme_bw()
+
+#poisson.mtest(as.integer(kmfcr2$amlrbiomass),R=99)  ##test for poisson distribution. Yes it is
+
+
+glm1<-glm(amlrbiomass~Year,data=subset(kmfcr2,Strata=="West"),family="poisson")
+glm2<-glm(amlrbiomass~Year,data=subset(kmfcr2,Strata=="Bransfield"),family="poisson")
+
+summary(glm1) # significant decreases in both strata. 
+summary(glm2)
+anova(glm1, test="Chisq")
+
+#diagnsotics:
+
+library(AER)
+dispersiontest(glm1)
+
+res <- residuals(glm1, type="deviance")
+plot(log(predict(glm1)), res) # seems ok
+abline(h=0, lty=2)
+qqnorm(res)
+qqline(res)
+
+
+dispersiontest(glm2)
+
+res2 <- residuals(glm2, type="deviance")
+plot(log(predict(glm2)), res2) # seems ok
+abline(h=0, lty=2)
+qqnorm(res2)
+qqline(res2)
+
+```
+
+### Penguins and fishery
+### transfer strata information into penguin data
+
+```{r,echo=TRUE}
+pcoords<-coordinates(data.frame(cpnset[4:5])) 
+
+p.spdf<-SpatialPointsDataFrame(pcoords,cpnset,proj4string = crs)
+
+identicalCRS(p.spdf,strata)
+
+p.strata<-over(p.spdf,strata)
+
+p.spdf$Strata<-p.strata$Strata
+
+p.spdf$StrataP<-p.spdf$Strata
+
+
+####merge penguins and fishery
+p.df<-data.frame(p.spdf)
+
+peng<-data.frame(p.df[1:8]) ## maintain in the data only variables to analyze
+
+summary(as.factor(peng$StrataP))
+
+
+peng.f<-merge(peng,kmfcr2,all.x=T)  ## merge and maintain all penguin data
+
+pengf<-subset(peng.f,StrataP==Strata)#if penguin and fishing strata coincides, then it is right
+
+pengf$CatchK<-pengf$CatchS/pengf$amlrbiomass
+
+ggplot(pengf,aes(CatchK,chickspernest))+ #figure supp2
+  
+  geom_point()+
+  theme_bw()+
+  xlab("% of caught biomass")+ylab("chicks raised per nest")+
+  geom_vline(xintercept=0.05,linetype="dashed") #5% catch
+
+pengf$Catch5.0<-ifelse(pengf$CatchK>0.05,">5.0%","<5.0%")
+pengf$Catch2.5<-ifelse(pengf$CatchK>0.025,">2.5%","<2.5%")
+pengf$KrillC<-ifelse(pengf$amlrbiomass<767000,"Krill<med","Krill>med")
+
+pengf<-na.omit(pengf)
+
+ddply(pengf, c("Catch5.0","KrillC"), summarise,
+      ncounts=length(chickspernest))
+
+ddply(pengf, c("Catch2.5","KrillC"), summarise,
+      ncounts=length(chickspernest))
+
+
+
+shapiro.test(pengf$chickspernest)#not normal
+
+ggplot(pengf,aes(chickspernest))+geom_histogram()+theme_bw()
+
+shapiro.test(pengf$chickspernest[pengf$chickspernest>0.5]) # normal eliminating values below 0.5
+
+pengf2<-subset(pengf,chickspernest>0.5)
+
+#pengf2<-subset(pengf2,site!="AITC" & site!="HANN"& site!="PTHO")
+
+summary(as.factor(pengf2$Catch5.0))
+summary(as.factor(pengf2$KrillC))
+unique(pengf2$site)
+
+
+
+pengf2$kcch<-paste(pengf2$KrillC,pengf2$Catch5.0,sep=", Catch")
+summary(as.factor(pengf2$kcch))
+
+pengf2$kch2<-factor(pengf2$kcch,levels=c("Krill>med, Catch<5.0%","Krill<med, Catch<5.0%","Krill<med, Catch>5.0%"))
+
+bartlett.test(pengf2$chickspernest,pengf2$kch2) # homogeneity is marginal
+
+
+summary(as.factor(pengf2$kch2))
+
+
+lmer2<-lmer(chickspernest~kch2+(CatchK|site),data=pengf2)
+
+summary(lmer2)
+
+anova(lmer2)
+
+ranova(lmer2)
+
+plot(lmer2)
+plot_model(lmer2,type="diag")
+
+plot_model(lmer2,type="re",grid=F)
+
+(ggplot(pengf2,aes(kch2,chickspernest))+
+    geom_hline(yintercept=1,linetype="dashed",linewidth=1)+
+    geom_boxplot()+
+    theme_bw()+xlab("")+ylab("Chicks raised per nest")+coord_flip()+
+    geom_signif(
+      comparisons = list(c("Krill>med, Catch<5.0%","Krill<med, Catch<5.0%"),
+                         c("Krill<med, Catch<5.0%","Krill<med, Catch>5.0%"),
+                         c("Krill>med, Catch<5.0%","Krill<med, Catch>5.0%")),
+      map_signif_level = F,step_increase = 0.075,
+      test="wilcox.test", # could not change it to the permutation results, but this is just for plotting
+      textsize = 3))
+
+
+# next plots are just to explore a little bit more...
+
+
+ggplot()+geom_point(data=pengf2,aes(x=CatchS,y=chickspernest,colour=KrillC,shape=SP))+
+  theme_bw()+geom_smooth(method="lm",se=F,
+            data=pengf2,aes(x=CatchS,y=chickspernest,colour=KrillC))+
+  scale_colour_manual(values=c("red","blue"))+
+  facet_wrap(site~.)
+
+
+#taking only sites with multiple samples in contrasting krill availabilkity: at ARDL, BART (neighbor areas) increased catch in years with low krill biomass meant decreasing breeding success;  Shireff is the only site in the Drake passage, and trends were inverted; but there was no samples in years with very hich catch...
+
+
+### that's all folks!
+
+```
+
+
