@@ -1,5 +1,6 @@
 ---
-title: "Analysis codes for the paper Pygoscelis penguin breeding success along the Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
+title: Analysis codes for the paper "Pygoscelis penguin breeding success along the
+  Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
 author: "Lucas Krüger, Francisco Santa Cruz, Mauricio Mardones, César Cárdenas"
 date: "`r Sys.Date()`"
 output:
@@ -9,13 +10,9 @@ output:
     fig_height: 8
   pdf_document: default
 ---
-#Background
+#Load necessary packages
 
-Codes for: (1) evaluate temporal trends of Pygoscelis penguin breeding success in the South Shetland Islands and Antarctic Peninsula; (2) evaluate temporal variability of krill biomass in relation to fishing harvest; (3) compare penguin breeding success in periods of low or high krill biomass and low or high fishing catches. Four data sources were used: MAPPPD data (Humphries et al. 2017 [MAPPPD](https://doi.org/10.1017/S0032247417000055); Lynch et al. 2023), file named MAPPPD.Rds; CCAMLR acoustic estimates of krill biomass (CCAMLR_krill_biomass.Rds), summarized fishing catch (CCAMLR_krill_fishing_catch.Rds) and management strata shapefiles (AMLR_Strata.Rds). Refer to the manuscript for methodological details.
-
-## Load necessary packages
-
-```{r, message=FALSE, echo=FALSE}
+```{r, echo=TRUE}
 library(plyr)
 library(dplyr) # for summarizing data
 library(reshape2)
@@ -31,14 +28,10 @@ library(rcompanion)
 library(lmPerm)
 library(ggsignif)
 
+
+
 ```
 
-
-```{r}
-
-#setwd("D:/BACKUP_Notebook_06_2022/KidsArentAlright/")
-
-```
 ###--------penguins-------------
 
 #load data
@@ -46,7 +39,7 @@ library(ggsignif)
 ### data from MAPPPD (penguinmap.org): Humphries et al. 2017 https://doi.org/10.1017/S0032247417000055
 
 ```{r,echo=TRUE}
-peng<-readRDS("MAPPPD.Rds") # query for area 48.1 
+peng<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/MAPPPD.Rds") # query for area 48.1 
 
 nests<-subset(peng,count_type=="nests",
               select=c(site_name,site_id,longitude_epsg_4326,latitude_epsg_4326,
@@ -96,11 +89,6 @@ pops2<-ddply(pops, c("SP"), summarise,
 sites<-ddply(cpn, c("site_id"), summarise,
              Ncounts=length(chicks))
 
-
-
-
-### -------------
-
 cpn$chickspernest<-cpn$chicks/cpn$nests  ### measure of breeding success (chicks raised per nest)
 
 cpn<-merge(cpn,sites,by="site_id")
@@ -115,10 +103,11 @@ ggplot(cpn,aes(nests,chickspernest))+geom_point() # a single large population wi
 ### eliminate pops with success = 2, as they were two cases of one or two nests
 ### eliminate the single population with 80 000 nests
 
-cpn<-subset(cpn,chickspernest<2 & nests<40000)
+cpn<-subset(cpn,chickspernest<2 & nests<40000) # assuming any estimation of success above 2 would mean imprecise counts
+
 summary(cpn$chickspernest)
 
-cpn<-subset(cpn,Ncounts>2)
+cpn<-subset(cpn,Ncounts>3) # only colonies with more than 3 counts
 
 shapiro.test(cpn$chickspernest) # not normal 
 
@@ -126,14 +115,11 @@ ggplot(cpn,aes(season_starting,chickspernest))+geom_point()+
   geom_vline(xintercept = 1990)+
   geom_smooth(method="lm",se=F)+facet_wrap(site_id~.)+theme_bw()
 
-#the plot above shows us a few thigs: slope site variability, few sites with data previous to 1990, populations with three counts may still be not enough for analysis. So, further filters:
+#the plot above shows us that there was site-level slope variability and there was few sites with data previous to 1990. So, further filters:
 
 cpn<-subset(cpn,season_starting>1989)
-cpn<-subset(cpn,Ncounts>3)
-cpn<-subset(cpn,site_id!="SELV" & site_id!="SPTR")
 
-
-cpn<-subset(cpn,Ncounts>2)
+cpn<-subset(cpn,site_id!="SELV" & site_id!="SPTR") 
 
 shapiro.test(cpn$chickspernest) # not normal 
 shapiro.test(cpn$chickspernest[cpn$chickspernest>0.5]) # normal if eliminate values lower than 0.5
@@ -142,7 +128,7 @@ ggplot(cpn,aes(chickspernest))+geom_histogram()+theme_bw()+xlab("Chicks raised p
 
 ### test if chicks per nest varied in time using sites  as random factors
 
-cpn$Zss<-scale(cpn$season_starting,center=T)
+cpn$Zss<-scale(cpn$season_starting,center=T) # scaling the time variable
 
 
 cpn$site_id2<-factor(cpn$site_id,levels=c("LLAN","ARDL","BART","SHIR","HALF","ENTR",
@@ -174,11 +160,11 @@ length((cpn$site_id[cpn$common_name=="gentoo penguin"]))
 (ggplot(cpn,aes(season_starting,chickspernest))+geom_point(size=1,alpha=0.5)+
     geom_smooth(method="lm",se=F)+facet_wrap(site_name2~.)+theme_bw()+theme(panel.spacing.x = unit(1.5, "lines")))
 
-lmer1<-lmer(chickspernest~Zss+(Zss|site_id),data=cpn)  #previous picture to justify the structure of the random term
+lmer1<-lmer(chickspernest~Zss+(Zss|site_id),data=cpn)  #previous picture justified the structure of the random term (there was site-level slope variability)
 
 isSingular(lmer1)# convergence problems detected
 
-#therefore, a bayesian evaluation with flexible priors is justified to avoid convergence issues 
+#therefore, a Bayesian evaluation with flexible priors is justified to avoid convergence issues 
 
 prior<- list(R = list(V = 1, nu = 0.002),
              G = list(G1 = list(V = diag(2), nu = 0.002,
@@ -194,10 +180,15 @@ mc1<-MCMCglmm(chickspernest~season_starting, random=~us(1 + Zss):site_id, rcov=~
               prior= prior)
 
 
-summary(mc1) # no significance, lets see the random terms posteriorly 
+summary(mc1) # no significance
+#adjust plot margins
+par(mar = c(1, 1, 1, 1))
 
-plot(mc1$Sol) # diagnostic plots for site effects majority of posteriors distributions are acceptable
-plot(mc1$VCV) # diagnostic plots for random efects acceptable
+#create plot
+plot(5:20)
+
+plot(mc1$Sol) # diagnostic plots for site effects majority of posteriors distributions were acceptable
+plot(mc1$VCV) # diagnostic plots for random effects were acceptable
 
 #proportion of the effective sample size: we want a low number as it indicates model converged with less iterations
 summary(mc1)$solutions[2,4]/10999 
@@ -207,15 +198,12 @@ sol<-data.frame(mc1$Sol) # random effects
 solm<-melt(sol,id.vars=c("X.Intercept.","season_starting"))
 
 solm$vars<-substring(solm$variable,first=1,last=4)
-summary(as.factor(solm$vars))
 
-intm<-subset(solm,vars=="X.In") #select intercepts
 slm<-subset(solm,vars=="Zss.") #select slopes
 
 tail(slm)
 
 slm$site_id<-substring(slm$variable,first=13,last=17)
-
 
 
 sites<-ddply(cpn, c("site_id"), summarise,
@@ -229,11 +217,7 @@ ranef<-ddply(slm, c("site_id"), summarise,
              q95=quantile(value,prob=0.95),
              q05=quantile(value,prob=0.05))
 
-
-
-
 rlat<-merge(slm,sites,by="site_id")
-
 
 ranef<-ddply(slm, c("site_id"), summarise,
              slp=mean(value),slpsd=sd(value),
@@ -242,14 +226,11 @@ ranef<-ddply(slm, c("site_id"), summarise,
              q95=quantile(value,prob=0.95),
              q05=quantile(value,prob=0.05))
 
-
 rlat<-merge(ranef,sites,by="site_id")
 
 rlat$Lat_ID<-paste(rlat$Lat,rlat$site_id)
 
-
 rlat$local<-ifelse(rlat$Lat<(-63.2),"Peninsula","South Shetlands")
-
 
 pairwisePermutationTest(slp~local,data=rlat) # difference is marginally significant
 
@@ -258,12 +239,8 @@ pairwisePermutationTest(slp~local,data=rlat) # difference is marginally signific
     geom_signif(
       comparisons = list(c("Peninsula","South Shetlands")),
       map_signif_level = F,step_increase = 0.075,
-      test="wilcox.test", # could not change it to the permutation results, but this is just for plotting
+      test="wilcox.test", # could not change the Wilcox test for the permutation results, but this is just for plotting
       textsize = 3))
-
-
-
-
 
 
 ```
@@ -273,7 +250,7 @@ pairwisePermutationTest(slp~local,data=rlat) # difference is marginally signific
 ```{r,echo=TRUE}
 
 
-krill<-readRDS("CCAMLR_krill_biomass.Rds") # data from WG-ASAM e-group (2021)
+krill<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/CCAMLR_krill_biomass.Rds") # data from WG-ASAM e-group (2021)
 
 
 krill2<-subset(krill,
@@ -286,7 +263,7 @@ krill2<-subset(krill,
 #load and process fishing data 
 
 ```{r,echo=TRUE}
-kf0<-read.csv("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/C1_Sect.csv") ### fishing data from CCAMLR, this is the raw data, not available freely (only the CCAMLR secretariat is allowed to distribute this data) 
+kf0<-read.csv("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/C1_Sect.csv") ### fishing data from CCAMLR, this is the raw data, not available freely (only the CCAMLR secretariat is allowed to distribute it) 
 
 kf0$CatchT<-kf0$KrillCaughtKG/1000  ### catch in tones
 
@@ -304,7 +281,7 @@ kf0$FSeason<-ifelse(kf0$month>11,
                                                  
 kf<-kf0
 
-strata<-readRDS("AMLR_Strata.Rds")  ### from CCAMLR as well (AMLR_strata.Rds)
+strata<-shapefile("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/Shapefiles/AMLR_STRATA_.shp")  ### from CCAMLR as well (AMLR_strata.Rds)
 
 crs=CRS( "+proj=longlat +datum=WGS84 +no_defs")
 
@@ -334,7 +311,7 @@ kfMo<-subset(kf.spdf,month=="12"|month=="1"|month=="2"|month=="3")
 fcr2<-ddply((data.frame(kfMo)), c("Year","Strata"), summarise,
             CatchS=sum(CatchT))  ### total catch for each year and strata
 
-# this is the data we are making available (CCAMLR_krill_fishing_catch.Rds), already summarized fishing data; if you wish to reproduce this script, starts out from here to analyze fishing data
+# this is the data we made available (CCAMLR_krill_fishing_catch.Rds), already summarized fishing data; 
 
 summary(fcr2) ### CatchS is catch in Ton
 
@@ -427,15 +404,15 @@ kmfcr2<-na.omit(kmfcr2)
 
 ggplot(kmfcr2,aes(amlrbiomass))+geom_histogram()+theme_bw()
 
-#poisson.mtest(as.integer(kmfcr2$amlrbiomass),R=99)  ##test for poisson distribution. Yes it is
+poisson.mtest(as.integer(kmfcr2$amlrbiomass),R=99)  ##test for poisson distribution. Yes it is
 
 
 glm1<-glm(amlrbiomass~Year,data=subset(kmfcr2,Strata=="West"),family="poisson")
 glm2<-glm(amlrbiomass~Year,data=subset(kmfcr2,Strata=="Bransfield"),family="poisson")
 
-summary(glm1) # significant decreases in both strata. 
+summary(glm1) 
 summary(glm2)
-anova(glm1, test="Chisq")
+
 
 #diagnsotics:
 
@@ -477,6 +454,7 @@ p.spdf$StrataP<-p.spdf$Strata
 
 
 ####merge penguins and fishery
+
 p.df<-data.frame(p.spdf)
 
 peng<-data.frame(p.df[1:8]) ## maintain in the data only variables to analyze
@@ -488,57 +466,58 @@ peng.f<-merge(peng,kmfcr2,all.x=T)  ## merge and maintain all penguin data
 
 pengf<-subset(peng.f,StrataP==Strata)#if penguin and fishing strata coincides, then it is right
 
-pengf$CatchK<-pengf$CatchS/pengf$amlrbiomass
+pengf$harvest<-pengf$CatchS/pengf$amlrbiomass # catch per unit of krill biomass (harvest rate)
 
-ggplot(pengf,aes(CatchK,chickspernest))+ #figure supp2
+ggplot(pengf,aes(harvest,chickspernest))+ #figure supp2
   
   geom_point()+
   theme_bw()+
-  xlab("% of caught biomass")+ylab("chicks raised per nest")+
+  xlab("% of caught biomass (harvest rate)")+ylab("chicks raised per nest")+
   geom_vline(xintercept=0.05,linetype="dashed") #5% catch
 
-pengf$Catch5.0<-ifelse(pengf$CatchK>0.05,">5.0%","<5.0%")
-pengf$Catch2.5<-ifelse(pengf$CatchK>0.025,">2.5%","<2.5%")
-pengf$KrillC<-ifelse(pengf$amlrbiomass<767000,"Krill<med","Krill>med")
+pengf$HR<-ifelse(pengf$harvest>0.05,">5%","<5%")
 
 pengf<-na.omit(pengf)
 
-ddply(pengf, c("Catch5.0","KrillC"), summarise,
+pengf$KrillC<-pengf$State
+
+summary(as.factor(pengf$KrillC))
+
+pengf$KrillC[pengf$KrillC=="Near or below catch limit"]<-"Biomass < mean"
+
+
+ddply(pengf, c("HR","KrillC"), summarise,
       ncounts=length(chickspernest))
-
-ddply(pengf, c("Catch2.5","KrillC"), summarise,
-      ncounts=length(chickspernest))
-
-
 
 shapiro.test(pengf$chickspernest)#not normal
 
-ggplot(pengf,aes(chickspernest))+geom_histogram()+theme_bw()
 
-shapiro.test(pengf$chickspernest[pengf$chickspernest>0.5]) # normal eliminating values below 0.5
+shapiro.test(pengf$chickspernest[pengf$chickspernest>0.5]) # normal if eliminating values below 0.5
 
 pengf2<-subset(pengf,chickspernest>0.5)
 
-#pengf2<-subset(pengf2,site!="AITC" & site!="HANN"& site!="PTHO")
+ggplot(pengf,aes(chickspernest))+geom_histogram()+theme_bw()+
+  ggplot(pengf2,aes(chickspernest))+geom_histogram()+theme_bw() # visualize two distributions
 
-summary(as.factor(pengf2$Catch5.0))
+summary(as.factor(pengf2$HR))
 summary(as.factor(pengf2$KrillC))
 unique(pengf2$site)
 
 
+pengf2$HRK<-paste(pengf2$KrillC,pengf2$HR,sep=", Catch") # harvest rate and krill categories
+summary(as.factor(pengf2$HRK)) 
 
-pengf2$kcch<-paste(pengf2$KrillC,pengf2$Catch5.0,sep=", Catch")
-summary(as.factor(pengf2$kcch))
+pengf2$HRK2<-factor(pengf2$HRK,levels=c("Biomass > mean, Catch<5%",
+                                        "Biomass < mean, Catch<5%",
+                                        "Biomass < mean, Catch>5%"))
 
-pengf2$kch2<-factor(pengf2$kcch,levels=c("Krill>med, Catch<5.0%","Krill<med, Catch<5.0%","Krill<med, Catch>5.0%"))
-
-bartlett.test(pengf2$chickspernest,pengf2$kch2) # homogeneity is marginal
-
-
-summary(as.factor(pengf2$kch2))
+bartlett.test(pengf2$chickspernest,pengf2$HRK2) # homogeneity is marginal
 
 
-lmer2<-lmer(chickspernest~kch2+(CatchK|site),data=pengf2)
+summary(as.factor(pengf2$HRK2))
+
+
+lmer2<-lmer(chickspernest~HRK2+(harvest|site),data=pengf2)
 
 summary(lmer2)
 
@@ -546,32 +525,34 @@ anova(lmer2)
 
 ranova(lmer2)
 
-plot(lmer2)
 plot_model(lmer2,type="diag")
 
 plot_model(lmer2,type="re",grid=F)
 
-(ggplot(pengf2,aes(kch2,chickspernest))+
+(ggplot(pengf2,aes(HRK2,chickspernest))+
     geom_hline(yintercept=1,linetype="dashed",linewidth=1)+
     geom_boxplot()+
     theme_bw()+xlab("")+ylab("Chicks raised per nest")+coord_flip()+
     geom_signif(
-      comparisons = list(c("Krill>med, Catch<5.0%","Krill<med, Catch<5.0%"),
-                         c("Krill<med, Catch<5.0%","Krill<med, Catch>5.0%"),
-                         c("Krill>med, Catch<5.0%","Krill<med, Catch>5.0%")),
+      comparisons = list(c("Biomass > mean, Catch<5%","Biomass < mean, Catch<5%"),
+                         c("Biomass < mean, Catch<5%","Biomass < mean, Catch>5%"),
+                         c("Biomass > mean, Catch<5%","Biomass < mean, Catch>5%")),
       map_signif_level = F,step_increase = 0.075,
-      test="wilcox.test", # could not change it to the permutation results, but this is just for plotting
+      test="t.test", # could not change it to the permutation results, but this is just for plotting
       textsize = 3))
-
+max(pengf3$CatchS)
 
 # next plots are just to explore a little bit more...
+pengf3<-subset(pengf2,site!="AITC" & site!="HANN"& site!="PTHO")
 
-
-ggplot()+geom_point(data=pengf2,aes(x=CatchS,y=chickspernest,colour=KrillC,shape=SP))+
-  theme_bw()+geom_smooth(method="lm",se=F,
-            data=pengf2,aes(x=CatchS,y=chickspernest,colour=KrillC))+
-  scale_colour_manual(values=c("red","blue"))+
-  facet_wrap(site~.)
+ggplot()+geom_point(data=pengf3,aes(x=CatchS,y=chickspernest,colour=KrillC,shape=SP))+
+  theme_bw()+theme(panel.spacing.x = unit(1.5, "lines"),
+                   axis.text.x = element_text(angle=90))+
+  geom_smooth(method="lm",se=F,
+              data=pengf3,aes(x=CatchS,y=chickspernest,colour=KrillC))+
+  scale_colour_manual(values=c("red","blue"),name="Krill availability")+
+  facet_wrap(site~.)+xlim(0,50000)+
+  xlab("Accumulated summer fishing catch (t)")+ ylab("Penguin chicks raised per nest")
 
 
 #taking only sites with multiple samples in contrasting krill availabilkity: at ARDL, BART (neighbor areas) increased catch in years with low krill biomass meant decreasing breeding success;  Shireff is the only site in the Drake passage, and trends were inverted; but there was no samples in years with very hich catch...
@@ -580,5 +561,3 @@ ggplot()+geom_point(data=pengf2,aes(x=CatchS,y=chickspernest,colour=KrillC,shape
 ### that's all folks!
 
 ```
-
-
