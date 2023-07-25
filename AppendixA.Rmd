@@ -520,7 +520,7 @@ summary(as.factor(pengf2$HRK2))
 lmer2<-lmer(chickspernest~HRK2+(harvest|site),data=pengf2)
 
 anova(lmer2,ddf="Satterthwaite",type = "III")
-lsmeansLT(lmer2)
+pairwisePermutationTest(lmer2@call$formula,data=pengf2,teststat="quadratic",method="BH",distribution="approximate")
 
 ranova(lmer2)
 
