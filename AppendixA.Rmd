@@ -1,6 +1,5 @@
 ---
-title: Analysis codes for the paper "Pygoscelis penguin breeding success along the
-  Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
+title: "Analysis codes for the paper Pygoscelis penguin breeding success along the Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
 author: "Lucas Krüger, Francisco Santa Cruz, Mauricio Mardones, César Cárdenas"
 date: "`r Sys.Date()`"
 output:
