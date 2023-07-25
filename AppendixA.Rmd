@@ -9,9 +9,13 @@ output:
     fig_height: 8
   pdf_document: default
 ---
-#Load necessary packages
+#Background
 
-```{r, echo=FALSE}
+Codes for: (1) evaluate temporal trends of Pygoscelis penguin breeding success in the South Shetland Islands and Antarctic Peninsula; (2) evaluate temporal variability of krill biomass in relation to fishing harvest; (3) compare penguin breeding success in periods of low or high krill biomass and low or high fishing catches. Four data sources were used: MAPPPD data (Humphries et al. 2017 [MAPPPD](https://doi.org/10.1017/S0032247417000055); Lynch et al. 2023), file named MAPPPD.Rds; CCAMLR acoustic estimates of krill biomass (CCAMLR_krill_biomass.Rds), summarized fishing catch (CCAMLR_krill_fishing_catch.Rds) and management strata shapefiles (AMLR_Strata.Rds). Refer to the manuscript for methodological details.
+
+## Load necessary packages
+
+```{r, message=FALSE, echo=FALSE}
 library(plyr)
 library(dplyr) # for summarizing data
 library(reshape2)
@@ -27,10 +31,8 @@ library(rcompanion)
 library(lmPerm)
 library(ggsignif)
 
-
-
 ```
-#change working directory
+
 
 ```{r}
 
@@ -44,7 +46,7 @@ library(ggsignif)
 ### data from MAPPPD (penguinmap.org): Humphries et al. 2017 https://doi.org/10.1017/S0032247417000055
 
 ```{r,echo=TRUE}
-peng<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/MAPPPD.Rds") # query for area 48.1 
+peng<-readRDS("MAPPPD.Rds") # query for area 48.1 
 
 nests<-subset(peng,count_type=="nests",
               select=c(site_name,site_id,longitude_epsg_4326,latitude_epsg_4326,
@@ -271,7 +273,7 @@ pairwisePermutationTest(slp~local,data=rlat) # difference is marginally signific
 ```{r,echo=TRUE}
 
 
-krill<-readRDS("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Project/CCAMLR_krill_biomass.Rds") # data from WG-ASAM e-group (2021)
+krill<-readRDS("CCAMLR_krill_biomass.Rds") # data from WG-ASAM e-group (2021)
 
 
 krill2<-subset(krill,
@@ -302,7 +304,7 @@ kf0$FSeason<-ifelse(kf0$month>11,
                                                  
 kf<-kf0
 
-strata<-shapefile("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/Shapefiles/AMLR_STRATA_.shp")  ### from CCAMLR as well (AMLR_strata.Rds)
+strata<-readRDS("AMLR_Strata.Rds")  ### from CCAMLR as well (AMLR_strata.Rds)
 
 crs=CRS( "+proj=longlat +datum=WGS84 +no_defs")
 
