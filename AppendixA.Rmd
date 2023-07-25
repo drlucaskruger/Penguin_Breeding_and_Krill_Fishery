@@ -27,7 +27,7 @@ library(lmerTest)
 library(rcompanion)
 library(lmPerm)
 library(ggsignif)
-
+library(energy)
 
 
 ```
