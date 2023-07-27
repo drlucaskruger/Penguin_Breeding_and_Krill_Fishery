@@ -23,17 +23,20 @@ bibliography: breeding.bib
 csl: apa.csl
 link-citations: yes
 linkcolor: blue
+
 ---
+
 
 # BACKGROUND
 
-This selfcontained document content the codes for: 
+This autoreplicant document content the codes for: 
 
 - 1. evaluate temporal trends of Pygoscelis penguin breeding success in the South Shetland Islands and Antarctic Peninsula; 
 
 - 2.  evaluate temporal variability of krill biomass in relation to fishing harvest; 
 
 - 3. compare penguin breeding success in periods of low or high krill biomass and low or high fishing catches. 
+
 
 
 ```{r setup1}
@@ -56,7 +59,6 @@ options(bitmapType = "cairo")
 dir.fig        <-"fig/"
 ```
 
-
 ```{r library}
 ### Load necessary packages
 library(plyr)
@@ -75,10 +77,8 @@ library(lmPerm)
 library(ggsignif)
 library(energy)
 library(kableExtra)
-library(ggthemes)
-library(ggpubr)
-library(fitdistrplus)
 ```
+
 
 # DATA
 
@@ -97,6 +97,7 @@ Refer to the manuscript for methodological details.
 # ANALISYS ROUTINE
 
 Query for area 48.1
+
 
 ```{r,echo=TRUE}
 peng<-readRDS("MAPPPD.Rds") 
@@ -133,7 +134,9 @@ chicksM<-ddply(chicks, c("common_name",
 cpn<-merge(nestsM,chicksM)
 ```
 
+
 Measure of breeding success (chicks raised per nest)
+
 
 ```{r,echo=TRUE}
 cpn$chickspernest<-cpn$chicks/cpn$nests  
@@ -145,7 +148,9 @@ cpn2<-data.frame(site=cpn$site_id,SP=cpn$common_name,
                  chickspernest=cpn$chickspernest) # cpn stands for Chicks Per Nest
 ```
 
+
 this is for summarizing number of populations and number of counts
+
 
 
 
@@ -163,7 +168,6 @@ kbl(counts,
   kable_styling(latex_options = c("striped",  "hold_position"))
 ```
 
-Data wranling
 ```{r,echo=TRUE}
 pops<-ddply(cpn2, c("SP","site"), summarise,
             pops=length(chickspernest),
@@ -181,95 +185,39 @@ cpn$chickspernest<-cpn$chicks/cpn$nests  ### measure of breeding success (chicks
 cpn<-merge(cpn,sites,by="site_id")
 
 summary(cpn$nests)
-```
 
-some plot about variable behavior.
-
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-a <- ggplot(cpn,aes(nests))+
-  geom_histogram()+
-  xlim(0,10000)+
-  theme_few()
-b <- ggplot(cpn,aes(nests))+
-  geom_histogram()+
-  xlim(0,100)+ # check small populations
-  theme_few()
-c <- ggplot(cpn,aes(nests,chickspernest))+
-  geom_point()+
-  theme_few()# a single large population will be excluded too
-
-ggarrange(a,b,c, ncol=2)
-```
+ggplot(cpn,aes(nests))+geom_histogram()+xlim(0,10000)
+ggplot(cpn,aes(nests))+geom_histogram()+xlim(0,100) # check small populations
+ggplot(cpn,aes(nests,chickspernest))+geom_point() # a single large population will be excluded too
 
 
-eliminate pops with success = 2, as they were two cases of one or two nests
-eliminate the single population with 80 000 nests
-```{r }
+### eliminate pops with success = 2, as they were two cases of one or two nests
+### eliminate the single population with 80 000 nests
+
 cpn<-subset(cpn,chickspernest<2 & nests<40000) # assuming any estimation of success above 2 would mean imprecise counts
 
 summary(cpn$chickspernest)
 
 cpn<-subset(cpn,Ncounts>3) # only colonies with more than 3 counts
 
-shapiro.test(cpn$chickspernest) # not normal
-```
+shapiro.test(cpn$chickspernest) # not normal 
 
-the plot shows us that there was site-level slope variability and there was few sites with data previous to 1990. So, further filters:
-
-```{r }
-ggplot(cpn,aes(season_starting,chickspernest))+
-  geom_point()+
+ggplot(cpn,aes(season_starting,chickspernest))+geom_point()+
   geom_vline(xintercept = 1990)+
-  geom_smooth(method="lm",se=F)+
-  facet_wrap(site_id~.)+
-  theme_few()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 2),
-        panel.grid = element_blank())+
-  labs(
-    x="",
-    y="Chicks raised per nest"
-  )
-  
+  geom_smooth(method="lm",se=F)+facet_wrap(site_id~.)+theme_bw()
 
-```
+#the plot above shows us that there was site-level slope variability and there was few sites with data previous to 1990. So, further filters:
 
-Testing normality
-
-```{r }
 cpn<-subset(cpn,season_starting>1989)
 
 cpn<-subset(cpn,site_id!="SELV" & site_id!="SPTR") 
 
 shapiro.test(cpn$chickspernest) # not normal 
 shapiro.test(cpn$chickspernest[cpn$chickspernest>0.5]) # normal if eliminate values lower than 0.5
-```
-
-
-```{r }
 cpn<-subset(cpn, chickspernest>0.5)
+ggplot(cpn,aes(chickspernest))+geom_histogram()+theme_bw()+xlab("Chicks raised per nest")
 
- ggplot(cpn,aes(chickspernest))+
-   geom_histogram(bins = 50,
-                  col="white")+
-   geom_density(col=2,
-                adjust = 1,
-                position = "stack")+
-   theme_few()+
-   xlab("Chicks raised per nest")
-```
-Kind of distribution with `descdist` function. Computes descriptive parameters of an empirical distribution for non-censored data and provides a skewness-kurtosis plot [@Delignette-Muller2015]
-
-```{r}
-dist <- descdist(cpn$chickspernest, boot = 200)
-```
-Normal distribution
-
-# MODELLING
-
-test if chicks per nest varied in time using sites  as random factors
-
-```{r }
-### 
+### test if chicks per nest varied in time using sites  as random factors
 
 cpn$Zss<-scale(cpn$season_starting,center=T) # scaling the time variable
 
@@ -278,13 +226,9 @@ cpn$site_id2<-factor(cpn$site_id,levels=c("LLAN","ARDL","BART","SHIR","HALF","EN
                                           "BROW","SPIP","ORNE","GEOR","LITC","DOBE","DAMO","LOCK",
                                           "JOUG","NEKO","ALMI","PCHA","PLEN","PETE"))  # order by location latitude
 
-cpn$site_name2<-factor(cpn$site_name,
-                       levels=c("Llano Point","Ardley Island",
-                                "Barton Peninsula",
-                                "Cape Shirreff","Half Moon Island",
-                                "Entrance Point",
-                                "Brown Bluff","Spigot Peak Point",
-                                "Orne Islands",
+cpn$site_name2<-factor(cpn$site_name,levels=c("Llano Point","Ardley Island","Barton Peninsula",
+                                              "Cape Shirreff","Half Moon Island","Entrance Point",
+                                              "Brown Bluff","Spigot Peak Point","Orne Islands",
                                               "Georges Point (Ronge Island)","Litchfield Island",
                                               "Dorian Beacon","Dorian Bay/Damoy Point","Port Lockroy",
                                               "Jougla Point","Neko Harbor (Andvord Bay)",
@@ -295,68 +239,40 @@ cpn$site_name2<-factor(cpn$site_name,
 
 length(unique(cpn$site_id[cpn$common_name=="adelie penguin"]))
 length((cpn$site_id[cpn$common_name=="adelie penguin"]))
+
 length(unique(cpn$site_id[cpn$common_name=="chinstrap penguin"]))
 length((cpn$site_id[cpn$common_name=="chinstrap penguin"]))
+
+
 length(unique(cpn$site_id[cpn$common_name=="gentoo penguin"]))
 length((cpn$site_id[cpn$common_name=="gentoo penguin"]))
-```
 
 
-```{r }
-ggplot(cpn,aes(season_starting,chickspernest))+
-  geom_point(size=1,alpha=0.5)+
-  geom_smooth(method="lm",se=F)+
-  facet_wrap(site_name2~.)+
-  theme_bw()+
-  theme(panel.spacing.x = unit(1.5, "lines"))
-```
+(ggplot(cpn,aes(season_starting,chickspernest))+geom_point(size=1,alpha=0.5)+
+    geom_smooth(method="lm",se=F)+facet_wrap(site_name2~.)+theme_bw()+theme(panel.spacing.x = unit(1.5, "lines")))
 
-Maximum likelihood or restricted maximum likelihood (REML) estimates of the parameters in linear mixed-effects models can be determined using the lmer function in the lme4 package for R. 
-
-As for most model-fitting functions in R, the model is described in an lmer call by a formula, in this case including both fixed- and random-effects terms. The formula and data together determine a numerical representation of the model from which the profiled deviance or the profiled REML criterion can be evaluated as a function
-of some of the model parameters [@Bates2015]. 
-
-```{r }
 lmer1<-lmer(chickspernest~Zss+(Zss|site_id),data=cpn)  #previous picture justified the structure of the random term (there was site-level slope variability)
-check_model(lmer1)
-```
 
-Not enough model terms in the conditional part of the model to check  for multicollinearity.
-Some of the variables were in matrix-format - probably you used   `scale()` on your data?
+isSingular(lmer1)# convergence problems detected
 
-If so, and you get an error, please try `datawizard::standardize()`  to standardize your data.
+#therefore, a Bayesian evaluation with flexible priors is justified to avoid convergence issues 
 
-```{r }
-isSingular(lmer1)# 
-```
-
-convergence problems detected, therefore, a Bayesian evaluation with flexible priors is justified to avoid convergence issues 
-```{r }
 prior<- list(R = list(V = 1, nu = 0.002),
              G = list(G1 = list(V = diag(2), nu = 0.002,
                                 alpha.mu = rep(0, 2),
                                 alpha.V= diag(2, 2, 2))))
 
-mc1<-MCMCglmm(chickspernest~season_starting,
-              random=~us(1 + Zss):site_id, rcov=~units,
+mc1<-MCMCglmm(chickspernest~season_starting, random=~us(1 + Zss):site_id, rcov=~units, 
+              
               family="gaussian",
-              data=cpn, nodes="ALL",  
-              scale=TRUE, nitt=10999, thin=1, burnin=1000, pr=T,
-              pl=FALSE, verbose=TRUE, DIC=TRUE, singular.ok=FALSE, 
-              saveX=TRUE,
-              saveZ=TRUE, saveXL=TRUE, slice=FALSE, 
-              ginverse=NULL, trunc=FALSE,
+              data=cpn, nodes="ALL",  scale=TRUE, nitt=10999, thin=1, burnin=1000, pr=T,
+              pl=FALSE, verbose=TRUE, DIC=TRUE, singular.ok=FALSE, saveX=TRUE,
+              saveZ=TRUE, saveXL=TRUE, slice=FALSE, ginverse=NULL, trunc=FALSE,
               prior= prior)
 
 
-plot(mc1) # no significance
+summary(mc1) # no significance
 #adjust plot margins
-
-
-```
-
-
-```{r }
 par(mar = c(1, 1, 1, 1))
 
 #create plot
@@ -364,10 +280,7 @@ plot(5:20)
 
 plot(mc1$Sol) # diagnostic plots for site effects majority of posteriors distributions were acceptable
 plot(mc1$VCV) # diagnostic plots for random effects were acceptable
-```
 
-
-```{r }
 #proportion of the effective sample size: we want a low number as it indicates model converged with less iterations
 summary(mc1)$solutions[2,4]/10999 
 
@@ -423,7 +336,9 @@ pairwisePermutationTest(slp~local,data=rlat) # difference is marginally signific
 
 ```
 
+
 #load krill acoustic data from "WG-ASAM Results from the WG-ASAM Intersessional e-Group on Krill Biomass Estimates from Acoustic Surveys; 2021;"
+
 
 ```{r,echo=TRUE}
 
@@ -438,7 +353,9 @@ krill2<-subset(krill,
 ```
 
 
+
 #load and process fishing data 
+
 
 ```{r,echo=TRUE}
 kf0<-read.csv("D:/BACKUP_Notebook_06_2022/KidsArentAlright/Data/C1_Sect.csv") ### fishing data from CCAMLR, this is the raw data, not available freely (only the CCAMLR secretariat is allowed to distribute it) 
@@ -476,7 +393,9 @@ kf.spdf<-subset(kf.spdf,FishingLon<(-50))  # eliminate the South Orkney Data
 
 ```
 
+
 #### bring krill and fishery together
+
 
 ```{r,echo=TRUE}
 
@@ -574,7 +493,9 @@ plot2a/plot2b/plot2c # figure 2
 
 ```
 
+
 ### Testing whether krill biomass changed in time 
+
 
 ```{r,echo=TRUE}
 
@@ -614,8 +535,10 @@ qqline(res2)
 
 ```
 
+
 ### Penguins and fishery
 ### transfer strata information into penguin data
+
 
 ```{r,echo=TRUE}
 pcoords<-coordinates(data.frame(cpnset[4:5])) 
@@ -738,3 +661,4 @@ ggplot()+geom_point(data=pengf3,aes(x=CatchS,y=chickspernest,colour=KrillC,shape
 ### that's all folks!
 
 ```
+
