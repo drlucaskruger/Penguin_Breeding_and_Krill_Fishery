@@ -1,15 +1,52 @@
 ---
-title: Analysis codes for the paper "Pygoscelis penguin breeding success along the
-  Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
-author: "Lucas Krüger, Francisco Santa Cruz, Mauricio Mardones, César Cárdenas"
-date: "`r Sys.Date()`"
+title: "Pygoscelis penguin breeding success along the Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
+subtitle: "Suplementary matierial. Riutine , analysis and outpus extra"
+author:
+  - Lucas Krüger^^[Instituto Antártico Chileno]
+  - Francisco Santa Cruz^[Instituto Antártico Chileno]
+  - Mardones Mauricio^[Instituo de Fomento Pesquero, mardones.mauricio@gmail.com]
+  - César Cárdenas^[Instituto Antártico Chileno]
+date:  "`r format(Sys.time(), '%d %B, %Y')`""
+bibliography: breeding.bib
+csl: apa.csl
+link-citations: yes
+linkcolor: blue
+always_allow_html: yes
 output:
-  word_document: default
-  html_document:
-    fig_width: 10
-    fig_height: 8
-  pdf_document: default
+  pdf_document:
+  toc: true
+    toc_depth: 3
 ---
+
+# BACKGRPUND
+
+This autoreplicant document content the codes for: 
+
+- 1. evaluate temporal trends of Pygoscelis penguin breeding success in the South Shetland Islands and Antarctic Peninsula; 
+
+- 2.  evaluate temporal variability of krill biomass in relation to fishing harvest; 
+
+- 3. compare penguin breeding success in periods of low or high krill biomass and low or high fishing catches. Four data sources were used: [MAPPPD data](Humphries et al. 2017 https://doi.org/10.1017/S0032247417000055) (Lynch et al. 2023), file named MAPPPD.Rds; CCAMLR acoustic estimates of krill biomass (CCAMLR_krill_biomass.Rds), summarized fishing catch (CCAMLR_krill_fishing_catch.Rds) and management strata shapefiles (AMLR_Strata.Rds). Refer to the manuscript for methodological details.
+
+Set format conditions
+
+```{r setup1, echo=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = 'center',
+                      fig.pos = "H",
+                      dev = 'jpeg',
+                      dpi = 300,
+                      fig_width = 10,
+                      fig.height = 8)
+#XQuartz is a mess, put this in your onload to default to cairo instead
+options(bitmapType = "cairo") 
+# (https://github.com/tidyverse/ggplot2/issues/2655)
+# Lo mapas se hacen mas rapido
+```
+
 #Load necessary packages
 
 ```{r, echo=TRUE}
@@ -28,9 +65,8 @@ library(rcompanion)
 library(lmPerm)
 library(ggsignif)
 library(energy)
-
-
 ```
+
 
 ###--------penguins-------------
 
