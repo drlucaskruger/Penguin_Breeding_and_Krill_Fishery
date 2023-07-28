@@ -1,5 +1,5 @@
 ---
-title: "Suplementary Materialrial. Rutine, analysis and outpus extra"
+title: "Suplementary Material. Rutine, analysis and outpus extra"
 subtitle: "Pygoscelis penguin breeding success along the Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
 author:
   - Krüger, Lucas^[Instituto Antártico Chileno, Milenio BASE]
