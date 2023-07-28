@@ -584,7 +584,7 @@ plot2c<-ggplot()+
 ```
 
 
-```{r echo=TRUE, message=FALSE, fig.height=4, fig.width=6}
+```{r echo=TRUE, message=FALSE, fig.height=7, fig.width=6}
 ggarrange(plot2a, plot2b, plot2c, ncol=1)
 ```
 
