@@ -1,27 +1,11 @@
 ---
-title: "Suplementary Material. Rutine, analysis and outpus extra"
-subtitle: "Pygoscelis penguin breeding success along the Western Antarctic Peninsula under contrasting krill biomass and fixed catch limit"
-author:
-  - Krüger, Lucas^[Instituto Antártico Chileno, Milenio BASE]
-  - Santa-Cruz, Francisco^[Instituto Antártico Chileno]
-  - Mardones, Mauricio^[Instituo de Fomento Pesquero]
-  - Cárdenas, César^[Instituto Antártico Chileno, Milenio BASE]
-date:  "`r format(Sys.time(), '%d %B, %Y')`"
-format:
-  pdf:
-    theme: cosmo
-    toc: true
-    toc-depth: 4
-bibliography: breeding.bib
-csl: apa.csl
-link-citations: TRUE
-linkcolor: blue
+title: Routine, analysis and suplementary material for the ms "Pygoscelis penguin
+  breeding success along the Western Antarctic Peninsula under contrasting krill biomass
+  and fixed catch limits"
+author: "Lucas Krüger, Maurício Mardones, Francisco Santa Cruz, César Cárdenas"
+date: "`r Sys.Date()`"
+output: html_document
 ---
-
-```{=tex}
-\fontsize{10}{12}
-\selectfont
-```
 
 \pagebreak 
 
@@ -57,7 +41,6 @@ options(bitmapType = "cairo")
 # (https://github.com/tidyverse/ggplot2/issues/2655)
 dir.fig        <-"fig/"
 ```
-
 
 ```{r library}
 ### Load necessary packages
@@ -104,9 +87,12 @@ Refer to the manuscript for methodological details.
 
 Query for area 48.1
 
-```{r,echo=TRUE}
+
+# penguin colonies and temporal analysis for the whole area
+```{r, echo=TRUE}
 
 peng<-readRDS("MAPPPD.Rds") 
+
 nests<-subset(peng,
               count_type=="nests",
               select=c(site_name,
@@ -119,7 +105,7 @@ nests<-subset(peng,
                        season_starting,
                        penguin_count,
                        count_type,
-                       vantage,accuracy))
+                       vantage,accuracy))  # subset nest counts
 
 chicks<-subset(peng,count_type=="chicks",
                select=c(site_name,
@@ -127,7 +113,8 @@ chicks<-subset(peng,count_type=="chicks",
                         latitude_epsg_4326,
                         common_name,
                         day,month,season_starting,penguin_count,
-                        count_type,vantage,accuracy))
+                        count_type,vantage,accuracy)) # subset chick counts
+
 nestsM<-ddply(nests, c("common_name",
                        "site_name",
                        "site_id",
@@ -153,28 +140,10 @@ cpn$chickspernest<-cpn$chicks/cpn$nests # breeding success measured as chicks ra
 
 
 sites<-ddply(cpn, c("site_id"), summarise,
-             Ncounts=length(chicks))
+             Ncounts=length(chicks))  # summarise number of counts per site
 
 
 cpn<-merge(cpn,sites,by="site_id") 
-
-ggplot(cpn,aes(nests))+
-  geom_histogram()+
-  xlim(0,10000)+ #colonies up to 10000 nests
-  theme_few()
-
-ggplot(cpn,aes(nests,chickspernest))+
-  geom_point()+
-  theme_few()# a single large colony will be excluded too
-
-
-#eliminate pops with success = 2
-#eliminate the single population with 80 000 nests
-
-
-cpn<-subset(cpn,chickspernest<2 & nests<40000) # assuming any estimation of success above 2 would mean imprecise counts
-
-cpn<-subset(cpn,Ncounts>3) # only colonies with more than 6 counts
 
 
 ggplot(cpn,aes(season_starting,chickspernest))+
@@ -189,37 +158,41 @@ ggplot(cpn,aes(season_starting,chickspernest))+
     x="",
     y="Chicks raised per nest"
   )
-#the plot shows us that there was site-level slope variability and there was only one site with data previous to 1990. #So, further filters:
 
-
+#further filters 
 
 cpn<-subset(cpn,season_starting>1989)
 
-cpn2<-data.frame(site=cpn$site_id,SP=cpn$common_name,
-                 Year=cpn$season_starting,
-                 Long=as.numeric(cpn$Long),
-                 Lat=as.numeric(cpn$Lat),
-                 chickspernest=cpn$chickspernest) 
+shapiro.test(cpn$chickspernest) # not normal
 
-counts<-ddply(cpn2, c("SP"), summarise,
-              ncounts=length(chickspernest))
+cpn.q <- quantile(cpn$chickspernest, probs=c(.3, .7), na.rm = FALSE)
+IQR.p <- IQR(cpn$chickspernest)
+
+Lower <- cpn.q[1] - 1.5*IQR.p
+Upper <- cpn.q[2] + 1.5*IQR.p 
+
+cpnS <- subset(cpn, chickspernest > Lower & chickspernest < Upper)
+
+cpn<-subset(cpnS,Ncounts>6) # only colonies with more than 6 counts
+
+ggplot(cpn,aes(season_starting, chickspernest,colour=common_name))+
+  geom_smooth(method="lm",se=F)+
+  geom_point()+theme_bw()+
+  facet_wrap(site_name~.) # Port Charcot & Orne colony still has 3-count data for gentoos
+
+cpn<-subset(cpn,common_name!="gentoo penguin"|site_name!="Port Charcot")
+cpn<-subset(cpn,common_name!="gentoo penguin"|site_name!="Orne Islands")
 
 
+shapiro.test(cpn$chickspernest) # normal if eliminate outliers
 
-shapiro.test(cpn$chickspernest[cpn$chickspernest>0.5]) # normal if eliminate outliers
+bartlett.test(cpn$chickspernest,cpn$common_name)
+bartlett.test(cpn$chickspernest,cpn$site_id)
 
-cpn<-subset(cpn, chickspernest>0.5)
-cpn<-subset(cpn,Ncounts>6) # only colonies with more than 6 counts
 
 plotdist(cpn$chickspernest,"norm",para=list(mean=mean(cpn$chickspernest), sd=sd(cpn$chickspernest)))
 
-kbl(counts, 
-    longtable = F, 
-    booktabs = T, 
-    caption = "\\label{Table1}Count colonies") %>% 
-  kable_styling(latex_options = c("striped",  "hold_position"))
 
- 
 
 cpn$site_id2<-factor(cpn$site_id,levels=c("LLAN","ARDL","BART","SHIR","HALF","ENTR",
                                           "BROW","SPIP","ORNE","GEOR","LITC","DOBE","DAMO","LOCK",
@@ -238,32 +211,38 @@ cpn$site_name2<-factor(cpn$site_name,
                                 "Brown Station","Port Charcot",
                                 "Pleneau Island","Petermann Island"))  # order by location latitude
 
+ggplot(cpn,aes(season_starting, chickspernest,
+    colour=common_name,shape=common_name,linetype=common_name))+
+  scale_colour_manual(values=c("black","blue","red"))+
+  geom_smooth(method="lm",se=F)+
+  geom_point(size=2,alpha=0.5)+theme_bw()+theme(panel.spacing.x = unit(1.5,"lines"))+
+  xlab("Breeding season")+ylab("Breeding success (chicks raised per nest)")+
+  facet_wrap(site_name2~.)  # figure 2
+
+
 #species summaries 
 
-cpnS<-subset(cpn,common_name!="gentoo penguin" | site_name!="Port Charcot") 
-cpnS<-subset(cpnS,common_name!="gentoo penguin" | site_name!="Orne Islands") # on this two sites gentoo had less than 6 points
+length(unique(cpn$site_id)) # number of sites
 
 
-length(unique(cpnS$site_id[cpn$common_name=="adelie penguin"]))
-length((cpnS$site_id[cpn$common_name=="adelie penguin"]))
+length(unique(cpn$site_id[cpn$common_name=="adelie penguin"]))
+length((cpn$site_id[cpn$common_name=="adelie penguin"]))
+
 length(unique(cpn$site_id[cpn$common_name=="chinstrap penguin"]))
-length((cpnS$site_id[cpn$common_name=="chinstrap penguin"]))
+length((cpn$site_id[cpn$common_name=="chinstrap penguin"]))
+
 length(unique(cpn$site_id[cpn$common_name=="gentoo penguin"]))
-length((cpnS$site_id[cpn$common_name=="gentoo penguin"]))
+length((cpn$site_id[cpn$common_name=="gentoo penguin"]))
 
-#site plot
 
-ggplot(cpnS,aes(season_starting,chickspernest,colour=common_name,shape=common_name))+
-  geom_point(size=1,alpha=0.5)+
-  geom_smooth(method="lm",se=F)+
-  facet_wrap(site_name2~.)+
-  theme_bw()+
-  theme(panel.spacing.x = unit(1.5, "lines"))
+cpn$zss<-scale(cpn$season_starting,scale=T,center=T)
 
+lmer1<-lmer(chickspernest~zss+(zss|common_name),data=cpn) # convergence issues, therefore, lets try a simpler method
+summary(lmer1)
+ranova(lmer1)
 
 #calculate a temporal trend for each site and species
-#calculate a temporal trend for each site and species
-slope<-cpnS %>%
+slope<-cpn %>%
   group_by(site_name2,common_name) %>%
   do({
     mod=glm(chickspernest~season_starting,
@@ -272,9 +251,7 @@ slope<-cpnS %>%
                Slope=coef(mod)[2])
   })
 
-
-
-sites<-ddply(cpnS, c("common_name","site_name2","site_id"), summarise,
+sites<-ddply(cpn, c("common_name","site_name2","site_id"), summarise,
              
              Lat=mean(Lat),
              Long=mean(Long))
@@ -286,15 +263,16 @@ ggplot(slst,aes(Lat,Slope))+geom_point()
 slst$locat<-ifelse(slst$Lat<(-63.2),"Peninsula","South Shetlands") #location category
 summary(as.factor(slst$locat))
 
-shapiro.test(slst$Slope) # normal
+shapiro.test(slst$Slope) # barely normal
 
-bartlett.test(slst$Slope,slst$locat) # variances are marginally homogeneous between locations
+bartlett.test(slst$Slope,slst$locat) # variances are homogeneous between locations
 
-bartlett.test(slst$Slope,slst$common_name)# variances are homogeneous between species
+bartlett.test(slst$Slope,slst$common_name)# variances are marginally homogeneous between species
 
 plotdist(slst$Slope,"norm",para=list(mean=mean(na.omit(slst$Slope)), sd=sd(na.omit(slst$Slope))))
 
 # compare locations
+
 
 lmlat<-lm(Slope~locat,data=slst)  
 summary(lmlat)
@@ -304,7 +282,7 @@ anova(lmlat)
 posterior_predictive_check(lmlat,iterations=300)
 
 ptt.lat<-pairwise.t.test(slst$Slope,slst$locat,p.adjust.method = "BH",pool.sd = T)
-p.lat<-ptt.lat$p.value
+
 
 #compare species
 lmsp<-lm(Slope~common_name,data=slst)  
@@ -312,7 +290,7 @@ summary(lmsp)
 anova(lmsp)
 
 # since we checked a priori  distribution and homogeneity, lets only check predictions
-posterior_predictive_check(lmsp,iterations=300)
+posterior_predictive_check(lmsp,lmlat,iterations=300)
 
 ptt.sp<-pairwise.t.test(slst$Slope,slst$common_name,p.adjust.method = "BH",pool.sd = T)
 p.sp<-ptt.sp$p.value
@@ -328,7 +306,7 @@ p.sp<-rbind(data.frame(group1="adelie penguin",group2="chinstrap penguin",p.valu
             data.frame(group1="adelie penguin",group2="gentoo penguin",p.value="n.s."))
 
 
-fig2<-(ggplot(slst,aes(locat,Slope))+
+(ggplot(slst,aes(locat,Slope))+
     geom_hline(yintercept = 0,linetype="dashed")+
     geom_boxplot(fill="grey")+
     theme_bw()+xlab("")+ylab("Colony-level temporal trend")+
@@ -343,70 +321,65 @@ fig2<-(ggplot(slst,aes(locat,Slope))+
      stat_pvalue_manual(p.sp[1,1:3],label="p.value",y.position = max(slst$Slope))+
      stat_pvalue_manual(p.sp[2,1:3],label="p.value",y.position = max(slst$Slope)+0.01)+
      stat_pvalue_manual(p.sp[3,1:3],label="p.value",y.position = max(slst$Slope)+0.02)+
-     ggtitle(label="b. Species"))
-
-fig2
+     ggtitle(label="b. Species")) 
 
 
 
-rm(list= ls()[! (ls() %in% c('cpn','cpn2'))])
 
+rm(list= ls()[! (ls() %in% c('cpn'))])
 ```
 
 
 
 ### krill and fishery data 
 
-from "WG-ASAM Results from the WG-ASAM Intersessional e-Group on Krill Biomass Estimates from Acoustic Surveys; 2021;"
-
-data from WG-ASAM e-group (2021) and subset the strata where fishing has been consistent
+krill acoustic biomass from "WG-ASAM Results from the WG-ASAM Intersessional e-Group on Krill Biomass Estimates from Acoustic Surveys; 2021;" data from WG-ASAM e-group (2021) and subset the strata where fishing has been consistent
 
 Fishing data from CCAMLR, this is the raw data, not available freely (only the CCAMLR secretariat is allowed to distribute it) 
 
 
-
 ```{r,echo=TRUE}
-### Load krill acoustic data 
+### Load krill acoustic dataand subset to the target strata
 
 
 krill<-readRDS("CCAMLR_krill_biomass.Rds")  
 krill2<-subset(krill, Strata=="Bransfield"|Strata=="West") 
 
 
-### Load fishery data 
+### Load and prepare fishery data 
 
+kf0<-read.csv("C1_Sect.csv") # ps: this data is not available here, only the already summarized data resulting from next steps
 
-
-kf0<-read.csv("C1_Sect.csv") 
 kf0$CatchT<-kf0$KrillCaughtKG/1000  ### catch in tones
 kf0$ts<- as.POSIXct(strptime(kf0$Day,format="%m/%d/%Y" ,tz="GMT")) 
 kf0$month<-month(kf0$ts)
 kf0$FSeason<-ifelse(kf0$month>11,
                     kf0$CalendarYear,kf0$CalendarYear-1)
-kf<-kf0
 
+
+kf0$Kseason<-kf0$FSeason+1
+kf<-kf0
 
 
 strata<-readRDS("AMLR_STRATA.Rds")  
 crs=CRS( "+proj=longlat +datum=WGS84 +no_defs")
 kcoords<-coordinates(data.frame(x=kf$FishingLon,y=kf$FishingLat))
 kf.spdf<-SpatialPointsDataFrame(kcoords,kf,proj4string = crs)
-
-kf.strata<-over(kf.spdf,strata)  # strata names into fishery data
+kf.strata<-over(kf.spdf,strata)
 kf.spdf$Strata<-kf.strata$Strata
 kf.spdf<-subset(kf.spdf,FishingLon<(-50))  # eliminate the South Orkney Data 
 
-kf.spdf$Year<-kf.spdf$CalendarYear
+kf.spdf$Year<-kf.spdf$Kseason
+
+#ggplot(data.frame(kf.spdf),aes(Kseason,CalendarYear,colour=as.factor(month)))+geom_point()
 
 kfMo<-subset(kf.spdf,month=="12"|month=="1"|month=="2"|month=="3") 
 fcr2<-ddply((data.frame(kfMo)), c("Year","Strata"), summarise,
             CatchS=sum(CatchT))  ### total catch for each year and strata
 
 summary(fcr2) ### CatchS is catch in Ton
-
-kr<-data.frame(krill[1],krill[2],krill[14]) # keep only needed variables for krill data
+kr<-data.frame(krill[1],krill[2],krill[14]) # keep only needed variables
 kmfcr<-merge(kr,fcr2,by=c("Strata","Year"),all=T)  # merge krill and fishery data 
-
 kmfcr2<-subset(kmfcr,Year<2019 & Year>1994)
 
 summary(kmfcr2$amlrbiomass[kmfcr2$Strata=="Bransfield"]) 
@@ -430,12 +403,6 @@ kmfcr2$State[is.na(kmfcr2$State)]<-"Biomass > mean"
 kmfcr2$State<-factor(kmfcr2$State,levels=c("Biomass > mean","Biomass < mean","Near or below catch limit"))
 
 
-
-```
-
-Plot 
-
-```{r echo=TRUE}
 
 fig3a<-ggplot()+
   geom_hline(yintercept=155,linetype="dotted",colour="red")+
@@ -490,20 +457,15 @@ fig3c<-ggplot()+
   ylab("% of catched biomass")+ 
   xlab("Krill biomass (million tonnes)") # figure X
 
+fig3a/fig3b/fig3c # fig 3
 
-```
-
-
-```{r echo=TRUE, message=FALSE, fig.height=7, fig.width=6}
-ggarrange(fig3a, fig3b, fig3c, ncol=1)
-```
-
-Testing whether krill biomass changed in time 
-
-```{r,echo=TRUE}
 kmfcr3<-na.omit(kmfcr2)
 
+```
 
+#is krill biomass reducing? Test if biomass in periods of high krill productivity is decreasing
+
+```{r}
 ### removing outliers 
 quartiles <- quantile(log(kmfcr3$amlrbiomass), probs=c(.2, .8), na.rm = FALSE)
 IQR <- IQR(log(kmfcr3$amlrbiomass))
@@ -515,8 +477,8 @@ data_no_outlier <- subset(kmfcr3, log(amlrbiomass) > Lower & log(amlrbiomass) < 
 
 data_no_outlier$State[data_no_outlier$State=="Near or below catch limit"]<-"Biomass < mean"
 
-shapiro.test(log(data_no_outlier$amlrbiomass)[data_no_outlier$State=="Biomass > mean"])
-bartlett.test(log(data_no_outlier$amlrbiomass)[data_no_outlier$State=="Biomass > mean"],data_no_outlier$Strata[data_no_outlier$State=="Biomass > mean"])
+shapiro.test(log(data_no_outlier$amlrbiomass)[data_no_outlier$State=="Biomass > mean"]) # normal
+bartlett.test(log(data_no_outlier$amlrbiomass)[data_no_outlier$State=="Biomass > mean"],data_no_outlier$Strata[data_no_outlier$State=="Biomass > mean"]) # homogeneous variance
 
 
 plotdist(log(data_no_outlier$amlrbiomass[data_no_outlier$State=="Biomass > mean"]),"norm",
@@ -534,24 +496,24 @@ plot(check_collinearity(glm1))
 
 summary(glm1)
 
-anova(glm1)
+anova(glm1) # krill biomass reduced significantly in time
 
 plot_model(glm1,type="pred")
 
-rm(list= ls()[! (ls() %in% c('cpn','cpn2','kmfcr2',"strata","crs"))])
+
+rm(list= ls()[! (ls() %in% c('cpn','kmfcr2',"strata","crs"))])
 
 ```
-
 ### Penguins and fishery
 
+### merge all previous datasets to answer the questions: does increased catches can affect penguin breeding success in a decreasing krill biomass context?
 
+```{r}
 
-```{r,echo=TRUE}
+pcoords<-coordinates(data.frame(cpn[6:5])) 
+plot(pcoords)
 
-summary(as.factor(cpn2$site))
-
-pcoords<-coordinates(data.frame(cpn2[4:5])) 
-p.spdf<-SpatialPointsDataFrame(pcoords,cpn2,proj4string = crs)
+p.spdf<-SpatialPointsDataFrame(pcoords,cpn,proj4string = crs)
 
 identicalCRS(p.spdf,strata)
 p.strata<-over(p.spdf,strata)
@@ -559,22 +521,24 @@ p.spdf$Strata<-p.strata$Strata
 p.spdf$StrataP<-p.spdf$Strata
 
 p.df<-data.frame(p.spdf)
-peng<-data.frame(p.df) ## maintain in the data only variables to analyze
+peng<-data.frame(p.df) 
 summary(as.factor(peng$StrataP))
 
-peng.f<-merge(peng,kmfcr2,all.x=T)  ## merge and maintain all penguin data
+peng$Year<-peng$season_starting
 
-summary(as.factor(peng.f$site))
+peng.f<-merge(peng,kmfcr2,by=c("Strata","Year"))  ## merge 
 
-pengf<-na.omit(peng.f)
+summary(as.factor(peng.f$site_id2))
 
-#pengf<-subset(peng.f,StrataP==Strata)#if penguin and fishing strata coincides, then it is right
+pengf<-na.omit(subset(peng.f,StrataP==Strata))#if penguin and fishing strata coincides, then it is right
 
-summary(as.factor(pengf$site))
+summary(as.factor(pengf$site_id))
 
 pengf$harvest<-pengf$CatchS/pengf$amlrbiomass # catch per unit of krill biomass (harvest rate)
 
-ggplot(pengf,aes(harvest,chickspernest))+ #figure supp2
+rm(list= ls()[! (ls() %in% c("pengf"))])
+
+ggplot(pengf,aes(harvest,chickspernest))+ #figure S6
   geom_point()+
   theme_bw()+
   xlab("% of caught biomass (harvest rate)")+
@@ -593,32 +557,28 @@ ddply(pengf, c("HR","KrillC"), summarise,
 
 shapiro.test(pengf$chickspernest)# normal
 
-shapiro.test(pengf$chickspernest[pengf$chickspernest>0.5]) # normal if eliminating outliers
+plotdist((pengf$chickspernest),"norm",para=list(mean=mean((pengf$chickspernest)), 
+                                                 sd=sd((pengf$chickspernest))))
 
-pengf2<-subset(pengf,chickspernest>0.5)
+summary(as.factor(pengf$HR))
 
+summary(as.factor(pengf$KrillC))
 
-plotdist((pengf2$chickspernest),"norm",para=list(mean=mean((pengf2$chickspernest)), 
-                                                 sd=sd((pengf2$chickspernest))))
+unique(pengf$site_id)
+summary(as.factor(pengf$site_id))
 
-summary(as.factor(pengf2$HR))
-
-summary(as.factor(pengf2$KrillC))
-
-unique(pengf2$site)
-summary(as.factor(pengf2$site))
-
-pengf2$HRK<-paste(pengf2$KrillC,pengf2$HR,sep=", Catch") # harvest rate and krill categories
-summary(as.factor(pengf2$HRK)) 
-pengf2$HRK2<-factor(pengf2$HRK,levels=c("Biomass > mean, Catch<5%",
+pengf$HRK<-paste(pengf$KrillC,pengf$HR,sep=", Catch") # harvest rate and krill categories
+summary(as.factor(pengf$HRK)) 
+pengf$HRK2<-factor(pengf$HRK,levels=c("Biomass > mean, Catch<5%",
                                         "Biomass < mean, Catch<5%",
                                         "Biomass < mean, Catch>5%"))
-bartlett.test(pengf2$chickspernest,pengf2$HRK2) # homogeneity of variances
 
-summary(as.factor(pengf2$HRK2))
+bartlett.test(pengf$chickspernest,pengf$HRK2) # homogeneity of variances
 
-lmer2<-lmer(chickspernest~HRK2+(1|site),
-            data=pengf2)
+summary(as.factor(pengf$HRK2))
+
+lmer2<-lmer(chickspernest~HRK2+(1|site_id),
+            data=pengf)
 anova(lmer2,
       ddf="Satterthwaite",
       type = "III")
@@ -628,15 +588,42 @@ summary(lmer2)
 
 ranova(lmer2)
 
+plot_model(lmer2,type="re") # Cape Shirreff is marginally different
+pf<-subset(pengf,site_id!="SHIR") # use the other two sites for the next analysis
 
-ggplot(pengf2,aes(HRK2,chickspernest))+
+
+pf$lcs<-log(pf$CatchS+1)
+pf$LKrill<-log(pf$amlrbiomass)
+
+shapiro.test(pf$chickspernest) # normal
+
+
+lm3<-lm(chickspernest~lcs*LKrill,
+            data=pf)
+lm3b<-lm(chickspernest~lcs+LKrill,
+          data=pf)   # to check for collinearity between variables
+
+
+summary(lm3)
+anova(lm3)
+plot_model(lm3,type="emm",terms=c("lcs[all]","LKrill[13,14]"))
+
+posterior_predictive_check(lm3,iterations=300)
+check_outliers(lm3)
+check_collinearity(lm3) # the program suggest check without interaction terms, therefore:
+check_collinearity(lm3b) # it is ok
+check_homogeneity(lm3)
+check_heteroscedasticity(lm3)
+
+(ggplot(pengf,aes(HRK2,chickspernest))+
   geom_hline(yintercept=1,
              linetype="dashed",
              linewidth=1)+
   geom_boxplot()+
   theme_bw()+
   xlab("")+
-  ylab("Chicks raised per nest")+coord_flip()+
+  ylab("Penguin chicks raised per nest")+
+    ggtitle("a.")+
   geom_signif(comparisons = list(c("Biomass > mean, Catch<5%",
                                    "Biomass < mean, Catch<5%"),
                                  c("Biomass < mean, Catch<5%",
@@ -646,74 +633,33 @@ ggplot(pengf2,aes(HRK2,chickspernest))+
               map_signif_level = F,
               step_increase = 0.075,
               test="t.test", 
-              textsize = 3)
+              textsize = 3))/
 
 
-# what if we only use colonies with over 5 counts?
 
-lmer2b<-lmer(chickspernest~HRK2+(1|site),
-            data=subset(pengf2,site=="SHIR"|site=="BART"|site=="ARDL"))
-anova(lmer2b,
-      ddf="Satterthwaite",
-      type = "III")
-
-
-summary(lmer2b)
-
-ranova(lmer2b)
-
-
-ggplot(subset(pengf2,site=="SHIR"|site=="BART"|site=="ARDL"),aes(HRK2,chickspernest))+
-  geom_hline(yintercept=1,
-             linetype="dashed",
-             linewidth=1)+
-  geom_boxplot()+
-  theme_bw()+
-  xlab("")+
-  ylab("Chicks raised per nest")+coord_flip()+
-  geom_signif(comparisons = list(c("Biomass > mean, Catch<5%",
-                                   "Biomass < mean, Catch<5%"),
-                                 c("Biomass < mean, Catch<5%",
-                                   "Biomass < mean, Catch>5%"),
-                                 c("Biomass > mean, Catch<5%",
-                                   "Biomass < mean, Catch>5%")),
-              map_signif_level = F,
-              step_increase = 0.075,
-              test="t.test", 
-              textsize = 3) # still different
-
-# next plots are just to explore a little bit more...
-
-
-ggplot()+
-  geom_point(data=subset(pengf2,site=="SHIR"|site=="BART"|site=="ARDL"),
+(ggplot()+
+  geom_point(data=pf,
              aes(x=CatchS,
                  y=chickspernest,
                  colour=KrillC,
-                 shape=SP),size=3)+
+                 shape=KrillC),size=2)+
   theme_bw()+
   theme(panel.spacing.x = unit(1.5, "lines"),
         axis.text.x = element_text(angle=90))+
   geom_smooth(method="lm",se=F,
-              data=subset(pengf2,site=="SHIR"|site=="BART"|site=="ARDL"),
+              data=pf,
               aes(x=CatchS,
                   y=chickspernest,
                   colour=KrillC,linetype=KrillC))+
   scale_colour_manual(values=c("red","blue"),
                       name="Krill availability")+
-  facet_wrap(site~.)+
+   scale_shape_manual(values=c("circle","square"),name="Krill availability")+
+  scale_linetype_manual(values=c("solid","dashed"),name="Krill availability")+
+  #facet_wrap(site_name2~.)+
   xlim(0,50000)+
+   ggtitle("b.")+
   xlab("Accumulated summer fishing catch (t)")+ 
-  ylab("Penguin chicks raised per nest")
+  ylab("Penguin chicks raised per nest"))
 
-rm(list= ls()[! (ls() %in% c('cpn','cpn2','kmfcr2',"strata","crs"))])
 
 ```
-
-
-
-Taking only sites with multiple samples in contrasting krill availability: at ARDL, BART (neighbor areas) increased catch in years with low krill biomass meant decreasing breeding success;  Shireff is the only site in the Drake passage, and trends were inverted; but there was no samples in years with very high catch...
-
-\pagebreak
-
-# REFERENCES
