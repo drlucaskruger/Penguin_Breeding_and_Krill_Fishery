@@ -4,10 +4,10 @@ title: Routine, analysis and suplementary material for the ms "Pygoscelis pengui
   and fixed catch limits"
 author: "Lucas Krüger, Maurício Mardones, Francisco Santa Cruz, César Cárdenas"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
-
-\pagebreak 
 
 # BACKGROUND
 
@@ -45,29 +45,25 @@ dir.fig        <-"fig/"
 ```{r library}
 ### Load necessary packages
 library(plyr)
-library(dplyr) # for summarizing data
+library(dplyr) 
 library(reshape2)
-library(ggplot2)  # plotting 
+library(ggplot2)  
 library(sjPlot)
 library(patchwork)
-library(lubridate) # to deal with time data
-library(udunits2) # to deal with geographical data
 library(raster)
-library(MCMCglmm) #Bayesian generalized linear mixed models
 library(lmerTest)
 library(rcompanion)
 library(lmPerm)
 library(ggsignif)
-library(energy)
-library(kableExtra)
 library(ggthemes)
 library(ggpubr)
 library(fitdistrplus)
 library(AER)
 library(easystats)
 library(formatR)
+library(lubridate)
 ```
-\pagebreak
+
 # DATA
 
 Four data sources were used: 
@@ -82,7 +78,7 @@ Four data sources were used:
 
 Refer to the manuscript for methodological details.
 
-\pagebreak
+
 # ANALISYS ROUTINE
 
 Query for area 48.1
@@ -536,7 +532,7 @@ summary(as.factor(pengf$site_id))
 
 pengf$harvest<-pengf$CatchS/pengf$amlrbiomass # catch per unit of krill biomass (harvest rate)
 
-rm(list= ls()[! (ls() %in% c("pengf"))])
+#rm(list= ls()[! (ls() %in% c("pengf"))])
 
 ggplot(pengf,aes(harvest,chickspernest))+ #figure S6
   geom_point()+
