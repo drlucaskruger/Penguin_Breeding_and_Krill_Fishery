@@ -574,7 +574,9 @@ bartlett.test(pengf$chickspernest,pengf$HRK2) # homogeneity of variances
 
 summary(as.factor(pengf$HRK2))
 
-lmer2<-lmer(chickspernest~HRK2+(1|site_id),
+pengf$zy<-scale(pengf$season_starting)
+
+lmer2<-lmer(chickspernest~HRK2+(zy|site_id),
             data=pengf)
 anova(lmer2,
       ddf="Satterthwaite",
