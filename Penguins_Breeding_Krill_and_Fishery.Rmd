@@ -3,15 +3,16 @@ title: Routine, analysis and suplementary material for the ms "Pygoscelis pengui
   breeding success along the Western Antarctic Peninsula under contrasting krill biomass
   and fixed catch limits"
 author: "Lucas Krüger, Maurício Mardones, Francisco Santa Cruz, César Cárdenas"
-date: "`r Sys.Date()`"
+date: '`r Sys.Date()`'
 output:
-  word_document: default
   html_document: default
+  word_document: default
+  pdf_document: default
 ---
 
 # BACKGROUND
 
-This selfcontained document content the codes for: 
+This document contains the codes for: 
 
 - 1. evaluate temporal trends of Pygoscelis penguin breeding success in the South Shetland Islands and Antarctic Peninsula; 
 
