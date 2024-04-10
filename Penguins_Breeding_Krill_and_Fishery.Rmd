@@ -391,23 +391,48 @@ summary(as.factor(pengf$HRK2))
 
 ```{r}
 
+pengf$ssz<-scale(pengf$season_starting)
 
-lmadp<-lm(season_starting~chickspernest,data=subset(pengf,common_name=="adelie penguin"))
-summary(lmadp) # no 
 
-lmchp<-lm(season_starting~chickspernest,data=subset(pengf,common_name=="chinstrap penguin"))
-summary(lmchp) # no 
+(ggplot(subset(pengf,site_id=="ARDL"),
+       aes(season_starting,chickspernest,colour=common_name,shape=common_name,linetype=common_name))+
+  geom_smooth(method="lm",se=F)+
+  geom_point()+facet_grid(.~site_name) +
+    scale_colour_manual(values=c("black","green4","red2"))+
+  xlab("Breeding season")+ylab("Penguin chicks raised per nest")+
+  theme_bw())/
+  
+(  ggplot(subset(pengf,site_id=="BART"),
+         aes(season_starting,chickspernest,colour=common_name,shape=common_name,linetype=common_name))+
+  geom_smooth(method="lm",se=F)+
+  geom_point()+facet_grid(.~site_name) +
+    scale_colour_manual(values=c("green4","red2"))+
+  xlab("Breeding season")+ylab("Penguin chicks raised per nest")+
+  theme_bw())/
+  
+(  ggplot(subset(pengf,site_id=="SHIR"),
+         aes(season_starting,chickspernest,colour=common_name,shape=common_name,linetype=common_name))+
+  geom_smooth(method="lm",se=F)+
+    scale_colour_manual(values=c("green4","red2"))+
+  geom_point()+facet_grid(.~site_name) +
+  xlab("Breeding season")+ylab("Penguin chicks raised per nest")+
+  theme_bw())
+# this plot supports that there is mostly intercept variability in sites and species effect (all slopes are negative)
 
-lmgep<-lm(season_starting~chickspernest,data=subset(pengf,common_name=="gentoo penguin"))
-summary(lmgep)# no
+d3<-subset(pengf,site_id=="ARDL"|site_id=="BART"|site_id=="SHIR")
 
-posterior_predictive_check(lmadp,iterations=300)
-posterior_predictive_check(lmchp,iterations=300)
-posterior_predictive_check(lmgep,iterations=300)
 
-check_heteroscedasticity(lmadp)
-check_heteroscedasticity(lmchp)
-check_heteroscedasticity(lmchp)
+
+lmd3<-lmer(chickspernest~ssz+(1|site_id)+(1|common_name),data=d3)
+summary(lmd3) # no 
+ranova(lmd3)
+
+
+(ggplot(d3,aes(season_starting, chickspernest))+
+  geom_smooth(method="lm",se=F)+geom_point()+theme_bw()+
+    facet_grid(common_name~site_name) +
+  xlab("Breeding season")+ylab("Penguin chicks raised per nest")+
+  ggtitle(label="a. Temporal trend"))
 
 
 
@@ -458,13 +483,6 @@ check_homogeneity(lmer2b)
 check_heteroscedasticity(lmer2b)
 
 
-
-(ggplot(pf,aes(season_starting,chickspernest,colour=common_name,shape=common_name,
-               linetype=common_name))+
-    geom_smooth(method="lm",se=F,fullrange=F)+xlim(1995,2020)+
-    geom_point()+theme_bw()+ggtitle("a.")+
-    xlab("Breeding season")+ylab("chicks raised per nest")+
-    scale_colour_manual(values=c("blue2","green4","red")))/
   
   
   (ggplot(pf,aes(HRK2,chickspernest))+
@@ -485,7 +503,7 @@ check_heteroscedasticity(lmer2b)
                  map_signif_level = F,
                  step_increase = 0.075,
                  test="t.test", 
-                 textsize = 3))
+                 textsize = 3))/
 
 ### bonus plot
 
@@ -512,9 +530,6 @@ check_heteroscedasticity(lmer2b)
    
   xlab("Accumulated summer fishing catch (t)")+ 
   ylab("Penguin chicks raised per nest"))
-
-
-
 
 
 ``` 
